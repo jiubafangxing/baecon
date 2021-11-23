@@ -1,0 +1,34 @@
+package store
+import (
+	"bytes"
+)
+
+type RecordBatch struct {
+	BaseOffset           int64
+	BatchLength          int32
+	PartitionLeaderEpoch int32
+	Magic                int8
+	Crc                  int32
+	Attributes           int16
+	LastOffsetDelta      int32
+	FirstTimestamp       int64
+	MaxTimestamp         int64
+	ProducerId           int64
+	ProducerEpoch        int16
+	BaseSequence         int32
+	Records              []Record
+}
+
+type Record struct {
+	Attributes     int8
+	TimestampDelta int64
+	OffsetDelta    int32
+	Key            bytes.Buffer
+	Value          bytes.Buffer
+	Headers        []Header
+}
+
+type Header struct {
+	HeaderKey   string
+	HeaderValue *bytes.Buffer
+}
