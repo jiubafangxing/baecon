@@ -1,9 +1,9 @@
 package store
 
 import (
-"bytes"
-"encoding/binary"
-"errors"
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"log"
 )
 
