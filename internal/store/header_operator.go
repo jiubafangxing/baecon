@@ -4,10 +4,20 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"github.com/jiubafangxing/baecon/internal/tools"
 	"log"
 )
 
-func (header *Header) WriteHeader(buf *bytes.Buffer) (int, error) {
+
+func (header *Header)WriteData(buf *bytes.Buffer) (int, error){
+	return header.writeHeader(buf)
+}
+
+func (header *Header)ReadData(buf *bytes.Buffer) (interface{}, error){
+	return header.readHeader(buf)
+}
+
+func (header *Header) writeHeader(buf *bytes.Buffer) (int, error) {
 	//check the buf
 	log.SetPrefix("header")
 	if nil == buf {
@@ -20,7 +30,7 @@ func (header *Header) WriteHeader(buf *bytes.Buffer) (int, error) {
 	//write key len
 	buf.Reset()
 	headerKeyLen := len(header.HeaderKey)
-	writeSize += appendElement(buf, headerKeyLen)
+	writeSize += tools.AppendElement(buf, headerKeyLen)
 
 	//write key
 	if headerKeyLen != 0 {
@@ -30,7 +40,7 @@ func (header *Header) WriteHeader(buf *bytes.Buffer) (int, error) {
 
 	//write value len
 	valueLen := header.HeaderValue.Len()
-	writeSize += appendElement(buf, valueLen)
+	writeSize += tools.AppendElement(buf, valueLen)
 
 	//write value
 	if valueLen != 0 {
@@ -41,7 +51,7 @@ func (header *Header) WriteHeader(buf *bytes.Buffer) (int, error) {
 	return writeSize, nil
 }
 
-func (header *Header) ReadHeader(buf *bytes.Buffer) (Header, error) {
+func (header *Header) readHeader(buf *bytes.Buffer) (Header, error) {
 
 	keySize, _ := binary.ReadVarint(buf)
 	var index int64 = 0
@@ -74,9 +84,4 @@ func (header *Header) ReadHeader(buf *bytes.Buffer) (Header, error) {
 
 }
 
-func appendElement(buf *bytes.Buffer, headerKeyLen int) int {
-	var keyArray [binary.MaxVarintLen64]byte
-	varintSize := binary.PutVarint(keyArray[:], int64(headerKeyLen))
-	buf.Write(keyArray[:varintSize])
-	return varintSize
-}
+
