@@ -53,6 +53,11 @@ func (header *Header) writeHeader(buf *bytes.Buffer) (int, error) {
 
 func (header *Header) readHeader(buf *bytes.Buffer) (Header, error) {
 
+	var defaultHeader Header
+	if(len(buf.Bytes())==0 ){
+		return defaultHeader ,NoHeader
+	}
+
 	keySize, _ := binary.ReadVarint(buf)
 	var index int64 = 0
 
