@@ -80,7 +80,7 @@ func (record  *Record) ReadData(buf *bytes.Buffer) (interface{}, error) {
 		print("write header err")
 		return 0 ,err
 	}
-	print("the record length is "+ string(varint))
+	print("the record length is ", varint)
 
 	attribute, _ := binary.ReadVarint(buf)
 	record.Attributes = int8(attribute)
