@@ -3,6 +3,8 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
+	"reflect"
 )
 
 func (recordBatch *RecordBatch) WriteData(oribuf *bytes.Buffer) (int64, error) {
@@ -65,14 +67,80 @@ func (recordBatch *RecordBatch) WriteData(oribuf *bytes.Buffer) (int64, error) {
 
 
 func (recordBatch *RecordBatch)ReadData(buf *bytes.Buffer) (interface{}, error){
-	//baseOffsetBuf := []byte{}
-	//_, err := buf.Read(baseOffsetBuf)
-	//if(nil != err){
-	//	return nil, err
-	//}
-	//reader := bytes.NewReader(buf.Bytes())
+	baseOffsetBuf := []byte{}
+	_, err := buf.Read(baseOffsetBuf)
+	if(nil != err){
+		return nil, err
+	}
 
+	var offset int64
+	err = binary.Read(buf, binary.BigEndian, offset)
+	if(nil != err){
+		return nil, err
+	}
 
-	return nil, nil
+	var length int32
+	err = binary.Read(buf, binary.BigEndian, length)
+	if(nil != err){
+		return nil, err
+	}
+
+	var leftOverLen = length - 12
+	array := make([]byte, leftOverLen)
+	binary.Read(buf,binary.BigEndian,array)
+
+	head := 0
+	last := 4
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.PartitionLeaderEpoch)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.Magic).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.Magic)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.Crc).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.Crc)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.Attributes).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.Attributes)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.LastOffsetDelta).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.LastOffsetDelta)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.FirstTimestamp).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.FirstTimestamp)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.MaxTimestamp).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.MaxTimestamp)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.ProducerId).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.ProducerId)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.ProducerEpoch).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.ProducerEpoch)
+
+	head = last
+	last += reflect.TypeOf(recordBatch.BaseSequence).Len()
+	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordBatch.BaseSequence)
+
+	head = last
+	recordBuf :=bytes.NewBuffer(array[head:])
+	for  {
+		record := Record{}
+		recordRes,err := record.ReadData(recordBuf)
+		if(errors.Is(NoHeader,err)){
+			break
+		}else{
+			recordTmp :=recordRes.(Record)
+			recordBatch.Records = append(recordBatch.Records, recordTmp)
+		}
+	}
+	return recordBatch, nil
 }
 
