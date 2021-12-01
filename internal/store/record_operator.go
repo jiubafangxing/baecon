@@ -11,7 +11,7 @@ import (
 
 func (record *Record) WriteData(buf *bytes.Buffer) (int64, error) {
 
-
+	baseBuf := &bytes.Buffer{}
     allLength  := int64(0)
 	//attribute length
     record.Attributes =  int8(0)
@@ -60,12 +60,13 @@ func (record *Record) WriteData(buf *bytes.Buffer) (int64, error) {
 	}
 
 	allLengthBuf := &bytes.Buffer{}
-	all := tools.AppendElement64(allLengthBuf, allLength)
+	tools.AppendElement64(allLengthBuf, allLength)
 
 
 	contentArray := [...] bytes.Buffer {*allLengthBuf,*attributeBuf,*timeKeyLenBuf, *offsetBuf, *keyLenBuf, record.Key,  *valueLenBuf, record.Value, *allLengthBuf}
-	buildRecordBuffer(buf, contentArray)
-	return allLength + int64(all),nil
+	buildRecordBuffer(baseBuf, contentArray)
+	buf.Write(baseBuf.Bytes())
+	return int64(len(baseBuf.Bytes())),nil
 }
 
 func buildRecordBuffer(buf *bytes.Buffer, bufferArray [9]bytes.Buffer) {
