@@ -74,6 +74,6 @@ func TestReadData(t *testing.T) {
 	readRecordBatch := &RecordBatch{}
 	data, _ := readRecordBatch.ReadData(buf)
 
-	batch := data.(RecordBatch)
+	batch := data.(*RecordBatch)
 	assert.NotNil(t, batch.Records,"no records")
 }
