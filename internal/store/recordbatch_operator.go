@@ -4,81 +4,84 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"reflect"
 )
 
 func (recordBatch *RecordBatch) WriteData(oribuf *bytes.Buffer) (int64, error) {
 
+	buf := recordBatch.toBuffer()
+	oribuf.Write(buf.Bytes())
+	return int64(len(buf.Bytes())), nil
+}
+
+func (recordBatch *RecordBatch) toBuffer() (*bytes.Buffer) {
 	tmpRecordBuf := &bytes.Buffer{}
 	length := int64(0)
 	for i, record := range recordBatch.Records {
-		print("\r\n","write record for ", i)
+		print("\r\n", "write record for ", i)
 		writeData, _ := record.WriteData(tmpRecordBuf)
 		length += writeData
 	}
 
 	buf := &bytes.Buffer{}
 
-	length = length+ 61
+	length = length + 61
 	//BaseOffset
 	data := int64(recordBatch.BaseOffset)
-	print("\r\n","baseoffset ", recordBatch.BaseOffset)
+	print("\r\n", "baseoffset ", recordBatch.BaseOffset)
 	binary.Write(buf, binary.BigEndian, data)
 
 	//BatchLength
 	BatchLengthData := int32(length)
-	print("\r\n","length ", BatchLengthData)
+	print("\r\n", "length ", BatchLengthData)
 	binary.Write(buf, binary.BigEndian, BatchLengthData)
 	//PartitionLeaderEpoch
 	PartitionLeaderEpochData := int32(recordBatch.PartitionLeaderEpoch)
-	print("\r\n","PartitionLeaderEpochData ", PartitionLeaderEpochData)
+	print("\r\n", "PartitionLeaderEpochData ", PartitionLeaderEpochData)
 	binary.Write(buf, binary.BigEndian, PartitionLeaderEpochData)
 	//Magic
 	MagicData := byte(recordBatch.Magic)
-	print("\r\n","MagicData ", MagicData)
+	print("\r\n", "MagicData ", MagicData)
 	binary.Write(buf, binary.BigEndian, MagicData)
 	//Crc
 	CrcData := int32(recordBatch.Crc)
-	print("\r\n","CrcData ", CrcData)
+	print("\r\n", "CrcData ", CrcData)
 	binary.Write(buf, binary.BigEndian, CrcData)
 	//Attributes
 	AttributesData := int16(recordBatch.Attributes)
-	print("\r\n","AttributesData ", AttributesData)
+	print("\r\n", "AttributesData ", AttributesData)
 	binary.Write(buf, binary.BigEndian, AttributesData)
 	//LastOffsetDelta
 	LastOffsetDeltaData := int32(recordBatch.LastOffsetDelta)
-	print("\r\n","LastOffsetDeltaData ", LastOffsetDeltaData)
+	print("\r\n", "LastOffsetDeltaData ", LastOffsetDeltaData)
 	binary.Write(buf, binary.BigEndian, LastOffsetDeltaData)
 	//FirstTimestamp
 	FirstTimestampData := int64(recordBatch.FirstTimestamp)
-	print("\r\n","FirstTimestampData ", FirstTimestampData)
+	print("\r\n", "FirstTimestampData ", FirstTimestampData)
 	binary.Write(buf, binary.BigEndian, FirstTimestampData)
 	//MaxTimestamp
 	MaxTimestampData := int64(recordBatch.MaxTimestamp)
-	print("\r\n","MaxTimestampData ", MaxTimestampData)
+	print("\r\n", "MaxTimestampData ", MaxTimestampData)
 	binary.Write(buf, binary.BigEndian, MaxTimestampData)
 	//ProducerId
 	ProducerIdData := int64(recordBatch.ProducerId)
-	print("\r\n","ProducerIdData ", ProducerIdData)
+	print("\r\n", "ProducerIdData ", ProducerIdData)
 	binary.Write(buf, binary.BigEndian, ProducerIdData)
 	//ProducerEpochcerId
 	ProducerEpochData := int16(recordBatch.ProducerEpoch)
-	print("\r\n","ProducerEpochData ", ProducerEpochData)
+	print("\r\n", "ProducerEpochData ", ProducerEpochData)
 	binary.Write(buf, binary.BigEndian, ProducerEpochData)
 	//BaseSequenceData
 	BaseSequenceData := int32(recordBatch.BaseSequence)
-	print("\r\n","BaseSequenceData ", BaseSequenceData)
+	print("\r\n", "BaseSequenceData ", BaseSequenceData)
 	binary.Write(buf, binary.BigEndian, BaseSequenceData)
 	//records count
-	recordLen := int32(	len(recordBatch.Records))
-	print("\r\n","Records len ", recordLen)
+	recordLen := int32(len(recordBatch.Records))
+	print("\r\n", "Records len ", recordLen)
 	binary.Write(buf, binary.BigEndian, recordLen)
-	resultBytes := buf.Bytes()
-
 	buf.Write(tmpRecordBuf.Bytes())
-
-	oribuf.Write(buf.Bytes())
-	return int64(len(resultBytes)),nil
+	return buf
 }
 
 
@@ -169,3 +172,21 @@ func (recordBatch *RecordBatch)ReadData(buf *bytes.Buffer) (interface{}, error){
 	return recordBatch, nil
 }
 
+func (recordBatch *RecordBatch) Write(writer io.Writer) (error){
+	buf := recordBatch.toBuffer()
+	writer.Write(buf.Bytes())
+	print("长度", buf.Bytes())
+	return  nil
+}
+
+func(recordBatch *RecordBatch) Read(reader io.Reader, size int64)(*RecordBatch, error) {
+	readSize := make([]byte, size)
+	reader.Read(readSize)
+	buffer := bytes.NewBuffer(readSize)
+	data, err := recordBatch.ReadData(buffer)
+	if(nil != err){
+		return nil, err
+	}
+	batch := data.(*RecordBatch)
+	return batch,err
+}
