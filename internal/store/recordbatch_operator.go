@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"os"
 	"reflect"
 )
 
@@ -15,7 +16,7 @@ func (recordBatch *RecordBatch) WriteData(oribuf *bytes.Buffer) (int64, error) {
 	return int64(len(buf.Bytes())), nil
 }
 
-func (recordBatch *RecordBatch) toBuffer() (*bytes.Buffer) {
+func (recordBatch *RecordBatch) toBuffer() *bytes.Buffer {
 	tmpRecordBuf := &bytes.Buffer{}
 	length := int64(0)
 	for i, record := range recordBatch.Records {
@@ -84,109 +85,115 @@ func (recordBatch *RecordBatch) toBuffer() (*bytes.Buffer) {
 	return buf
 }
 
-
-func (recordBatch *RecordBatch)ReadData(buf *bytes.Buffer) (interface{}, error){
+func (recordBatch *RecordBatch) ReadData(buf *bytes.Buffer) (interface{}, error) {
 	array2 := make([]byte, 12)
 	buf.Read(array2)
 	var length int32
-	binary.Read(bytes.NewBuffer(array2[8:12]) ,binary.BigEndian, &length)
-
-
-
+	binary.Read(bytes.NewBuffer(array2[8:12]), binary.BigEndian, &length)
 
 	var leftOverLen = length - 12
 	array := make([]byte, leftOverLen)
-	binary.Read(buf,binary.BigEndian,array)
+	binary.Read(buf, binary.BigEndian, array)
 
 	head := 0
 	last := 4
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.PartitionLeaderEpoch)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.PartitionLeaderEpoch)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.Magic).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.Magic)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.Magic)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.Crc).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.Crc)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.Crc)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.Attributes).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.Attributes)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.Attributes)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.LastOffsetDelta).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.LastOffsetDelta)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.LastOffsetDelta)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.FirstTimestamp).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.FirstTimestamp)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.FirstTimestamp)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.MaxTimestamp).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.MaxTimestamp)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.MaxTimestamp)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.ProducerId).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.ProducerId)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.ProducerId)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.ProducerEpoch).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.ProducerEpoch)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.ProducerEpoch)
 
 	head = last
 	last += int(reflect.TypeOf(recordBatch.BaseSequence).Size())
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,&recordBatch.BaseSequence)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, &recordBatch.BaseSequence)
 
 	recordSize := 0
 	head = last
 	last += 4
-	print("size is ",last-head)
-	binary.Read(bytes.NewBuffer(array[head:last]),binary.BigEndian,recordSize)
+	print("size is ", last-head)
+	binary.Read(bytes.NewBuffer(array[head:last]), binary.BigEndian, recordSize)
 
 	head = last
-	recordBuf :=bytes.NewBuffer(array[head:])
-	for  {
+	recordBuf := bytes.NewBuffer(array[head:])
+	for {
 		record := Record{}
 		lackLen := recordBuf.Len()
-		if(lackLen ==0){
+		if lackLen == 0 {
 			break
 		}
-		recordRes,err := record.ReadData(recordBuf)
-		if(errors.Is(NoHeader,err)){
+		recordRes, err := record.ReadData(recordBuf)
+		if errors.Is(NoHeader, err) {
 			break
-		}else{
-			recordTmp :=recordRes.(*Record)
+		} else {
+			recordTmp := recordRes.(*Record)
 			recordBatch.Records = append(recordBatch.Records, *recordTmp)
 		}
 	}
 	return recordBatch, nil
 }
 
-func (recordBatch *RecordBatch) Write(writer io.Writer) (error){
+func (recordBatch *RecordBatch) Write(writer io.Writer) error {
 	buf := recordBatch.toBuffer()
 	writer.Write(buf.Bytes())
-	print("长度", buf.Bytes())
-	return  nil
+	return nil
 }
 
-func(recordBatch *RecordBatch) Read(reader io.Reader, size int64)(*RecordBatch, error) {
+func (recordBatch *RecordBatch) Read(reader io.Reader, size int64) (*RecordBatch, error) {
 	readSize := make([]byte, size)
 	reader.Read(readSize)
 	buffer := bytes.NewBuffer(readSize)
 	data, err := recordBatch.ReadData(buffer)
-	if(nil != err){
+	if nil != err {
 		return nil, err
 	}
 	batch := data.(*RecordBatch)
-	return batch,err
+	return batch, err
+}
+
+func (recordBatch *RecordBatch) ReadFromStart2End(file *os.File, start, end int64) (*RecordBatch, error) {
+	recordBytes := make([]byte, end-start)
+	file.ReadAt(recordBytes, start)
+	data, err := recordBatch.ReadData(bytes.NewBuffer(recordBytes))
+	if nil != err {
+		return nil, err
+	}
+	batch := data.(*RecordBatch)
+	return batch, err
 }
