@@ -2,7 +2,16 @@ package store
 
 import (
 	"bytes"
+	"os"
 )
+
+type TRecordBatch interface {
+	type FileRecordBatch
+}
+
+type RecordBatchReader interface {
+	nextBatch() (*TRecordBatch, error)
+}
 
 type RecordBatch struct {
 	BaseOffset           int64
@@ -20,6 +29,15 @@ type RecordBatch struct {
 	Records              []Record
 }
 
+type FileRecordBatch struct {
+	LogFile *os.File
+	Length int32
+	StartPosition int64
+	Offset int64
+}
+
+
+
 type Record struct {
 	Attributes     int8
 	TimestampDelta int64
@@ -33,3 +51,10 @@ type Header struct {
 	HeaderKey   string
 	HeaderValue *bytes.Buffer
 }
+
+type FileRecordBatchReader struct {
+	File *os.File
+	Position int64
+	End int64
+}
+
