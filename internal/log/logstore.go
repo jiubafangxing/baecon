@@ -2,8 +2,8 @@ package log
 
 import (
 	"encoding/binary"
-	"errors"
 	"github.com/edsrzf/mmap-go"
+	"github.com/jiubafangxing/baecon/internal/common"
 	"github.com/jiubafangxing/baecon/internal/store"
 	"io/ioutil"
 	"os"
@@ -12,6 +12,9 @@ import (
 
 const (
 	OFFSET_INDEX_SIZE = 16
+	LOG_SUFFIX = "log"
+	INDEX_SUFFIX = "index"
+	DOT = "."
 )
 
 type  LogSegment struct {
@@ -30,36 +33,58 @@ func (this * LogSegment) readRecords(offset int64)  {
 }
 
 func  BuildLogSegment(segmentPath string)(error, *LogSegment) {
-	fileList, err := ioutil.ReadDir(segmentPath)
-	if(nil != err){
-		return   err,nil
+	exists, _ := common.PathExists(common.BASE_DIR + segmentPath)
+	if(!exists){
+		createrr := os.MkdirAll(segmentPath, 0766)
+		if createrr != nil {
+			print(createrr)
+		}
 	}
-	if len(fileList) >= 0 {
-		return errors.New("no log file exist"), nil
-	}
+	fileList, _ := ioutil.ReadDir(common.BASE_DIR + segmentPath)
 	var mmapBytes []byte
 	var indexFile *os.File
 	var logFile *os.File
-	for _, fileItem := range fileList {
-		//offset index
-		if(strings.HasSuffix(fileItem.Name(),"index")){
-			indexFile, _ := os.Open(fileItem.Name())
-			defer indexFile.Close()
-			mmap, err := mmap.Map(indexFile, mmap.RDWR, 0)
-			if(nil != err){
-				return err,nil
-			}
-			mmapBytes = mmap
+	if len(fileList) >= 0 {
+		var indexFileNames []string=  []string{segmentPath,DOT, INDEX_SUFFIX}
+		var logFileNames []string=  []string{segmentPath,DOT, LOG_SUFFIX}
+		indexFileName := strings.Join(indexFileNames,"")
+		logFileName := strings.Join(logFileNames,"")
+		indexFile, err := os.Create(common.BASE_DIR + indexFileName)
+		if nil != err {
+			print("create index fail")
+			return nil,nil
 		}
-		//logfile
-		if(strings.HasSuffix(fileItem.Name(),"log")) {
-			logFile, err := os.Open(fileItem.Name())
-			if err != nil {
-				return err,nil
-			}
-			logFile = logFile
+		logFile, err := os.Create(common.BASE_DIR + logFileName)
+		if nil != err {
+			print("create log fail")
+			return nil,nil
 		}
+		indexFileInfo, _ := indexFile.Stat()
+		logFileInfo, _ := logFile.Stat()
+		fileList = append(fileList, indexFileInfo)
+		fileList = append(fileList, logFileInfo)
 	}
+		for _, fileItem := range fileList {
+			//offset index
+			if(strings.HasSuffix(fileItem.Name(),"index")){
+				indexFile, _ := os.Open(fileItem.Name())
+				defer indexFile.Close()
+				mmap, err := mmap.Map(indexFile, mmap.RDWR, 0)
+				if(nil != err){
+					return err,nil
+				}
+				mmapBytes = mmap
+			}
+			//logfile
+			if(strings.HasSuffix(fileItem.Name(),"log")) {
+				logFile, err := os.Open(fileItem.Name())
+				if err != nil {
+					return err,nil
+				}
+				logFile = logFile
+			}
+		}
+
 	logFileItem := &LogFile{logFile}
 	index := &OffsetIndex{
 		indexFile,
@@ -114,10 +139,8 @@ func (this * LogSegment) targetBatch(targetOffset uint64) (*store.RecordBatch,er
 		if nil != err {
 			return nil, err
 		}
-		this.LogFile.storeFile.Read()
-
-
 	}
+	return nil,nil
 }
 
 func (this * OffsetIndex) loadIndex(start int) *OffsetPosition {

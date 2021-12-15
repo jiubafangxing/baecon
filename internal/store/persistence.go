@@ -5,12 +5,12 @@ import (
 	"os"
 )
 
-type TRecordBatch interface {
-	type FileRecordBatch
-}
+//type TRecordBatch interface {
+//	type FileRecordBatch
+//}
 
 type RecordBatchReader interface {
-	nextBatch() (*TRecordBatch, error)
+	nextBatch() (*FileRecordBatch, error)
 }
 
 type RecordBatch struct {
