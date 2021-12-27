@@ -13,7 +13,7 @@ const (
 
 
 
-func (this *FileRecordBatchReader) nextBatch() (interface{},error){
+func (this *FileRecordBatchReader) NextBatch() (interface{},error){
 	lackSize := this.End - this.Position
 	if(lackSize < HEADER_SIZE_UP_TO_MAGIC){
 		return nil, errors.New("no enough message")
@@ -27,6 +27,10 @@ func (this *FileRecordBatchReader) nextBatch() (interface{},error){
 	size := binary.BigEndian.Uint32(readBytes[8:12])
 	fileRecortBatch := &FileRecordBatch{this.File, int32(size), this.Position, int64(offset)}
 	return  fileRecortBatch , nil
+}
+
+func (this *FileRecordBatchReader) HasNext()bool{
+	return this.Position > this.End
 }
 
 func (this *FileRecordBatch) write(recordBatch RecordBatch){

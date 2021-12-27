@@ -84,11 +84,12 @@ func  BuildLogSegment(segmentPath string)(error, *LogSegment) {
 				logFile = logFile
 			}
 		}
-
+	m := common.MmapOperator{}
+	m.Mmap = mmapBytes
 	logFileItem := &LogFile{logFile}
 	index := &OffsetIndex{
 		indexFile,
-		mmapBytes,
+		m,
 		}
 	return  nil, &LogSegment{
 		logFileItem,
@@ -105,12 +106,15 @@ type LogFile struct {
 
 type OffsetIndex struct {
 	storeFile *os.File
-	mmapBytes []byte
+	//mmapBytes *[]byte
+	Operator common.MmapOperator
 }
 
 func (this * OffsetIndex) Entries() int{
-	return len(this.mmapBytes) / OFFSET_INDEX_SIZE
+	return len(this.Operator.Mmap) / OFFSET_INDEX_SIZE
 }
+
+
 
 func (this * OffsetIndex)binarySearch(start int , end int, targetOffset uint64) (int, int) {
 	startIndex := this.loadIndex(start)
@@ -129,7 +133,7 @@ func (this * OffsetIndex)binarySearch(start int , end int, targetOffset uint64) 
 	}
 }
 
-func (this * LogSegment) targetBatch(targetOffset uint64) (*store.RecordBatch,error) {
+func (this * LogSegment) targetBatch(targetOffset uint64, size int32) (*store.RecordBatch,error) {
 	end := this.OffsetIndex.Entries()
 	startIndex, endIndex := this.OffsetIndex.binarySearch(0, end, targetOffset)
 	if(startIndex == endIndex){
@@ -143,8 +147,46 @@ func (this * LogSegment) targetBatch(targetOffset uint64) (*store.RecordBatch,er
 	return nil,nil
 }
 
+func (this *LogSegment) rangeBatch(targetOffset uint64, size int) ([]*store.RecordBatch, error) {
+	stat, err := this.LogFile.storeFile.Stat()
+	if(nil != err){
+		return nil, err
+	}
+	logSize := stat.Size()
+	fileRecordsReader := &store.FileRecordBatchReader{
+		this.LogFile.storeFile,
+		int64(targetOffset),
+		logSize,
+	}
+	var batches []*store.RecordBatch
+	for fileRecordsReader.HasNext() {
+		batch, err := fileRecordsReader.NextBatch()
+		if err != nil {
+			return nil, err
+		}
+		batches = append(batches, batch.(*store.RecordBatch))
+		if (len(batches) >= size){
+			break
+		}
+	}
+	return batches, nil
+}
+
+func (this *LogSegment) write(batch *store.RecordBatch)error {
+	stat, err := this.LogFile.storeFile.Stat()
+	if(nil != err){
+		return err
+	}
+	position := stat.Size()
+	batch.Write(this.LogFile.storeFile)
+	//store index
+	this.OffsetIndex.Operator.PutIndex(batch.BaseOffset,position)
+	return nil
+}
+
+
 func (this * OffsetIndex) loadIndex(start int) *OffsetPosition {
-	positionBytes := this.mmapBytes[start*OFFSET_INDEX_SIZE : (start+1)*OFFSET_INDEX_SIZE]
+	positionBytes := (this.Operator.Mmap)[start*OFFSET_INDEX_SIZE : (start+1)*OFFSET_INDEX_SIZE]
 	indexKey := binary.BigEndian.Uint64(positionBytes[0:8])
 	indexValue := binary.BigEndian.Uint64(positionBytes[8:16])
 	return &OffsetPosition{
