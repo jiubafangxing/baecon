@@ -12,29 +12,28 @@ import (
 
 const (
 	OFFSET_INDEX_SIZE = 16
-	LOG_SUFFIX = "log"
-	INDEX_SUFFIX = "index"
-	DOT = "."
+	LOG_SUFFIX        = "log"
+	INDEX_SUFFIX      = "index"
+	DOT               = "."
 )
 
-type  LogSegment struct {
+type LogSegment struct {
 	LogFile *LogFile
 	//Sparse index based on relative offset and physical position
 	OffsetIndex *OffsetIndex
 
 	SegmentName string
 
+	LastEndOffset int64
+}
+
+func (this *LogSegment) readRecords(offset int64) {
 
 }
 
-func (this * LogSegment) readRecords(offset int64)  {
-
-
-}
-
-func  BuildLogSegment(segmentPath string)(error, *LogSegment) {
+func BuildLogSegment(segmentPath string, active bool, logEndOffset int64) (error, *LogSegment) {
 	exists, _ := common.PathExists(common.BASE_DIR + segmentPath)
-	if(!exists){
+	if !exists {
 		createrr := os.MkdirAll(segmentPath, 0766)
 		if createrr != nil {
 			print(createrr)
@@ -45,60 +44,70 @@ func  BuildLogSegment(segmentPath string)(error, *LogSegment) {
 	var indexFile *os.File
 	var logFile *os.File
 	if len(fileList) >= 0 {
-		var indexFileNames []string=  []string{segmentPath,DOT, INDEX_SUFFIX}
-		var logFileNames []string=  []string{segmentPath,DOT, LOG_SUFFIX}
-		indexFileName := strings.Join(indexFileNames,"")
-		logFileName := strings.Join(logFileNames,"")
+		var indexFileNames []string = []string{segmentPath, DOT, INDEX_SUFFIX}
+		var logFileNames []string = []string{segmentPath, DOT, LOG_SUFFIX}
+		indexFileName := strings.Join(indexFileNames, "")
+		logFileName := strings.Join(logFileNames, "")
 		indexFile, err := os.Create(common.BASE_DIR + indexFileName)
 		if nil != err {
 			print("create index fail")
-			return nil,nil
+			return nil, nil
 		}
 		logFile, err := os.Create(common.BASE_DIR + logFileName)
 		if nil != err {
 			print("create log fail")
-			return nil,nil
+			return nil, nil
 		}
 		indexFileInfo, _ := indexFile.Stat()
 		logFileInfo, _ := logFile.Stat()
 		fileList = append(fileList, indexFileInfo)
 		fileList = append(fileList, logFileInfo)
 	}
-		for _, fileItem := range fileList {
-			//offset index
-			if(strings.HasSuffix(fileItem.Name(),"index")){
-				indexFile, _ := os.Open(fileItem.Name())
-				defer indexFile.Close()
-				mmap, err := mmap.Map(indexFile, mmap.RDWR, 0)
-				if(nil != err){
-					return err,nil
-				}
-				mmapBytes = mmap
+	for _, fileItem := range fileList {
+		//offset index
+		if strings.HasSuffix(fileItem.Name(), "index") {
+			indexFile, _ := os.Open(fileItem.Name())
+			defer indexFile.Close()
+			mmap, err := mmap.Map(indexFile, mmap.RDWR, 0)
+			if nil != err {
+				return err, nil
 			}
-			//logfile
-			if(strings.HasSuffix(fileItem.Name(),"log")) {
-				logFile, err := os.Open(fileItem.Name())
-				if err != nil {
-					return err,nil
-				}
-				logFile = logFile
-			}
+			mmapBytes = mmap
 		}
+		//logfile
+		if strings.HasSuffix(fileItem.Name(), "log") {
+			logFile, err := os.Open(fileItem.Name())
+			if err != nil {
+				return err, nil
+			}
+			logFile = logFile
+		}
+	}
 	m := common.MmapOperator{}
 	m.Mmap = mmapBytes
 	logFileItem := &LogFile{logFile}
 	index := &OffsetIndex{
 		indexFile,
 		m,
-		}
-	return  nil, &LogSegment{
+	}
+	// if the log segment is active , we need to load last index offset to the end of the logfile ,
+	// then we can get the lastEndOffset
+	logOffset := &LogSegment{
 		logFileItem,
 		index,
 		segmentPath,
+		logEndOffset,
+	}
+	if active {
+		offset, err := logOffset.LastIndexOffset()
+		if err != nil {
+			return err, nil
+		}
+		logOffset.LastEndOffset = offset
 
 	}
+	return nil, logOffset
 }
-
 
 type LogFile struct {
 	storeFile *os.File
@@ -110,33 +119,31 @@ type OffsetIndex struct {
 	Operator common.MmapOperator
 }
 
-func (this * OffsetIndex) Entries() int{
+func (this *OffsetIndex) Entries() int {
 	return len(this.Operator.Mmap) / OFFSET_INDEX_SIZE
 }
 
-
-
-func (this * OffsetIndex)binarySearch(start int , end int, targetOffset uint64) (int, int) {
+func (this *OffsetIndex) binarySearch(start int, end int, targetOffset uint64) (int, int) {
 	startIndex := this.loadIndex(start)
 	endIndex := this.loadIndex(end)
-	if((end -start) ==1 && startIndex.indexKey < targetOffset && endIndex.indexKey < targetOffset){
+	if (end-start) == 1 && startIndex.indexKey < targetOffset && endIndex.indexKey < targetOffset {
 		return start, end
 	}
 	mid := (start + end) >> 1
 	midIndex := this.loadIndex(mid)
-	if midIndex.indexKey > targetOffset{
+	if midIndex.indexKey > targetOffset {
 		return this.binarySearch(start, mid, targetOffset)
-	} else if midIndex.indexKey < targetOffset{
+	} else if midIndex.indexKey < targetOffset {
 		return this.binarySearch(mid, end, targetOffset)
-	} else{
-		return mid,mid
+	} else {
+		return mid, mid
 	}
 }
 
-func (this * LogSegment) targetBatch(targetOffset uint64, size int32) (*store.RecordBatch,error) {
+func (this *LogSegment) targetBatch(targetOffset uint64, size int32) (*store.RecordBatch, error) {
 	end := this.OffsetIndex.Entries()
 	startIndex, endIndex := this.OffsetIndex.binarySearch(0, end, targetOffset)
-	if(startIndex == endIndex){
+	if startIndex == endIndex {
 		offsetIndex := this.OffsetIndex.loadIndex(startIndex)
 		absPosition := offsetIndex.indexValue
 		_, err := this.LogFile.storeFile.Seek(int64(absPosition), 0)
@@ -144,18 +151,18 @@ func (this * LogSegment) targetBatch(targetOffset uint64, size int32) (*store.Re
 			return nil, err
 		}
 	}
-	return nil,nil
+	return nil, nil
 }
 
-func (this *LogSegment) rangeBatch(targetOffset uint64, size int) ([]*store.RecordBatch, error) {
+func (this *LogSegment) rangeBatch(targetOffsetPosition uint64, size int) ([]*store.RecordBatch, error) {
 	stat, err := this.LogFile.storeFile.Stat()
-	if(nil != err){
+	if nil != err {
 		return nil, err
 	}
 	logSize := stat.Size()
 	fileRecordsReader := &store.FileRecordBatchReader{
 		this.LogFile.storeFile,
-		int64(targetOffset),
+		int64(targetOffsetPosition),
 		logSize,
 	}
 	var batches []*store.RecordBatch
@@ -165,27 +172,26 @@ func (this *LogSegment) rangeBatch(targetOffset uint64, size int) ([]*store.Reco
 			return nil, err
 		}
 		batches = append(batches, batch.(*store.RecordBatch))
-		if (len(batches) >= size){
+		if len(batches) >= size {
 			break
 		}
 	}
 	return batches, nil
 }
 
-func (this *LogSegment) write(batch *store.RecordBatch)error {
+func (this *LogSegment) write(batch *store.RecordBatch) error {
 	stat, err := this.LogFile.storeFile.Stat()
-	if(nil != err){
+	if nil != err {
 		return err
 	}
 	position := stat.Size()
 	batch.Write(this.LogFile.storeFile)
 	//store index
-	this.OffsetIndex.Operator.PutIndex(batch.BaseOffset,position)
+	this.OffsetIndex.Operator.PutIndex(batch.BaseOffset, position)
 	return nil
 }
 
-
-func (this * OffsetIndex) loadIndex(start int) *OffsetPosition {
+func (this *OffsetIndex) loadIndex(start int) *OffsetPosition {
 	positionBytes := (this.Operator.Mmap)[start*OFFSET_INDEX_SIZE : (start+1)*OFFSET_INDEX_SIZE]
 	indexKey := binary.BigEndian.Uint64(positionBytes[0:8])
 	indexValue := binary.BigEndian.Uint64(positionBytes[8:16])
@@ -195,9 +201,21 @@ func (this * OffsetIndex) loadIndex(start int) *OffsetPosition {
 	}
 }
 
-type  OffsetPosition struct {
-	indexKey uint64
-	indexValue uint64
+func (this *LogSegment) LastIndexOffset() (int64, error) {
+	position := this.OffsetIndex.Operator.WritePosition
+	//last index in the index file
+	index := this.OffsetIndex.loadIndex(int(position))
+	stat, err := this.LogFile.storeFile.Stat()
+	if nil != err {
+		return -1, err
+	}
+	batch, _ := this.rangeBatch(index.indexValue, int(stat.Size()))
+	last := len(batch)
+	recordBatch := batch[last-1]
+	return recordBatch.BaseOffset + int64(recordBatch.LastOffsetDelta), nil
 }
 
-
+type OffsetPosition struct {
+	indexKey   uint64
+	indexValue uint64
+}
