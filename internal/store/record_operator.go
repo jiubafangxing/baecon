@@ -63,7 +63,7 @@ func (record *Record) WriteData(buf *bytes.Buffer) (int64, error) {
 	tools.AppendElement64(allLengthBuf, allLength)
 
 
-	contentArray := [...] bytes.Buffer {*allLengthBuf,*attributeBuf,*timeKeyLenBuf, *offsetBuf, *keyLenBuf, record.Key,  *valueLenBuf, record.Value, *allLengthBuf}
+	contentArray := [...] bytes.Buffer {*allLengthBuf,*attributeBuf,*timeKeyLenBuf, *offsetBuf, *keyLenBuf, record.Key,  *valueLenBuf, record.Value, *headerBuffer}
 	buildRecordBuffer(baseBuf, contentArray)
 	buf.Write(baseBuf.Bytes())
 	return int64(len(baseBuf.Bytes())),nil
@@ -82,7 +82,7 @@ func (record  *Record) ReadData(buf *bytes.Buffer) (interface{}, error) {
 		return 0 ,err
 	}
 	print("the record length is ", varint)
-
+	 //*allLengthBuf, *headerBuffer
 	attribute, _ := binary.ReadVarint(buf)
 	record.Attributes = int8(attribute)
 
@@ -111,14 +111,19 @@ func (record  *Record) ReadData(buf *bytes.Buffer) (interface{}, error) {
 		valueIndex++
 	}
 	record.Value = *bytes.NewBuffer(valueBytes)
+	headerBuf := bytes.NewBuffer(buf.Bytes())
 	for  {
+		headerBuf = bytes.NewBuffer(headerBuf.Bytes())
 		readerHeader := Header{}
-		headerRes,err := readerHeader.readHeader(buf)
-		if(errors.Is(NoHeader,err)){
+		if(headerBuf.Len() == 0){
 			break
-		}else{
-			record.Headers = append(record.Headers, headerRes)
 		}
+		headerRes,err := readerHeader.readHeader(headerBuf)
+		if(errors.Is(NoHeader,err)) {
+			break
+		}
+		record.Headers = append(record.Headers, headerRes)
+
 	}
 
 	return record,nil

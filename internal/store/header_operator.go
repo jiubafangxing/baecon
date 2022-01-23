@@ -54,7 +54,7 @@ func (header *Header) writeHeader(buf *bytes.Buffer) (int, error) {
 func (header *Header) readHeader(buf *bytes.Buffer) (Header, error) {
 
 	var defaultHeader Header
-	if(len(buf.Bytes())==0 ){
+	if(len((*buf).Bytes())==0 ){
 		return defaultHeader ,NoHeader
 	}
 
@@ -63,7 +63,7 @@ func (header *Header) readHeader(buf *bytes.Buffer) (Header, error) {
 
 	var writeBytes []byte
 	for index < keySize {
-		readByte, _ := buf.ReadByte()
+		readByte, _ := (*buf).ReadByte()
 		writeBytes = append(writeBytes, readByte)
 		index++
 	}

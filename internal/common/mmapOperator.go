@@ -16,14 +16,19 @@ func (this *MmapOperator) putInt64(writePosition int64) error {
 		return errors.New("no space to write")
 	}
 	writeBytes := this.Mmap[this.WritePosition : this.WritePosition+8]
-	binary.PutVarint(writeBytes, writePosition)
+	//binary.PutVarint(writeBytes, writePosition)
+	binary.BigEndian.PutUint64(writeBytes,uint64(writePosition))
 	this.WritePosition += 8
 	return nil
 }
 
 // set sparse index
 func (this *MmapOperator) PutIndex(offset int64, writePosition int64) error {
-	if this.validBytes-this.WritePosition > INDEX_INTERVAL_BYTES {
+	if(offset == 1 || writePosition ==0){
+		//writeIndex
+		this.putInt64(offset)
+		this.putInt64(writePosition)
+	}else if this.validBytes-this.WritePosition > INDEX_INTERVAL_BYTES {
 		//writeIndex
 		this.putInt64(offset)
 		this.putInt64(writePosition)
